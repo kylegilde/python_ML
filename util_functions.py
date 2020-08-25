@@ -55,9 +55,7 @@ def get_feature_names(column_transformer, verbose = False):
             else:
 
                 names = list(transformer.get_feature_names())
-                if verbose: print(names)
   
-
         elif hasattr(transformer,'indicator_') and transformer.add_indicator:
             # is this transformer one of the imputers & did it call the MissingIndicator?
 
@@ -170,11 +168,12 @@ def plot_feature_importance(pipeline, top_n_features=100, rank_features=True, or
     fig = px.bar(importances, orientation=orientation, width=width, height=height)
     fig.update(layout_showlegend=False)
     fig.show()
-
+    
 
 def reduce_mem_usage(df, n_unique_object_threshold=0.30, verbose=True):
     """
     Downcasts the data type when possible in order to reduce memory usage
+    
     Inspiration: https://www.kaggle.com/arjanso/reducing-dataframe-memory-size-by-65
     
     Parameters
@@ -194,44 +193,47 @@ def reduce_mem_usage(df, n_unique_object_threshold=0.30, verbose=True):
     dtype_df = pd.DataFrame(df.dtypes.astype('str'), columns=['original'])
 
     for col in df.columns:
-        if pd.api.types.is_numeric_dtype(df[col]):
+        
+        a_col = df[col]
+        
+        if pd.api.types.is_numeric_dtype(a_col):
                 
             # make variables for max, min
-            mx, mn = df[col].max(), df[col].min()
+            mx, mn = a_col.max(), a_col.min()
 
             # test if column can be converted to an integer
-            as_int = df[col].astype(np.int64)
-            delta = np.nansum((df[col] - as_int)) # NaNs will be summed as zeros
+            as_int = a_col.astype(np.int64)
+            delta = np.nansum((a_col] - as_int)) # NaNs will be summed as zeros
 
             # Make Integer/unsigned Integer datatypes
             if delta == 0:
                 if mn >= 0:
-                    if not isinstance(df[col], np.uint8) and mx < np.iinfo(np.uint8).max:
-                        df[col] = df[col].astype(np.uint8)
-                    elif not isinstance(df[col], np.uint16) and mx < np.iinfo(np.uint16).max:
-                        df[col] = df[col].astype(np.uint16)
-                    elif not isinstance(df[col], np.uint32) and mx < np.iinfo(np.uint32).max:
-                        df[col] = df[col].astype(np.uint32)
-                    elif not isinstance(df[col], np.uint64):
-                        df[col] = df[col].astype(np.uint64)
+                    if not isinstance(a_col, np.uint8) and mx < np.iinfo(np.uint8).max:
+                        df[col] = a_col.astype(np.uint8)
+                    elif not isinstance(a_col, np.uint16) and mx < np.iinfo(np.uint16).max:
+                        df[col] = a_col.astype(np.uint16)
+                    elif not isinstance(a_col, np.uint32) and mx < np.iinfo(np.uint32).max:
+                        df[col] = a_col.astype(np.uint32)
+                    elif not isinstance(a_col, np.uint64):
+                        df[col] = a_col.astype(np.uint64)
                 else:
-                    if not isinstance(df[col], np.int8) and mn > np.iinfo(np.int8).min and mx < np.iinfo(np.int8).max:
-                        df[col] = df[col].astype(np.int8)
-                    elif not isinstance(df[col], np.int16) and mn > np.iinfo(np.int16).min and mx < np.iinfo(np.int16).max:
-                        df[col] = df[col].astype(np.int16)
-                    elif not isinstance(df[col], np.int32) and mn > np.iinfo(np.int32).min and mx < np.iinfo(np.int32).max:
-                        df[col] = df[col].astype(np.int32)
-                    elif not isinstance(df[col], np.int64) and mn > np.iinfo(np.int64).min and mx < np.iinfo(np.int64).max:
-                        df[col] = df[col].astype(np.int64)
+                    if not isinstance(a_col, np.int8) and mn > np.iinfo(np.int8).min and mx < np.iinfo(np.int8).max:
+                        df[col] = a_col.astype(np.int8)
+                    elif not isinstance(a_col, np.int16) and mn > np.iinfo(np.int16).min and mx < np.iinfo(np.int16).max:
+                        df[col] = a_col.astype(np.int16)
+                    elif not isinstance(a_col, np.int32) and mn > np.iinfo(np.int32).min and mx < np.iinfo(np.int32).max:
+                        df[col] = a_col.astype(np.int32)
+                    elif not isinstance(a_col, np.int64) and mn > np.iinfo(np.int64).min and mx < np.iinfo(np.int64).max:
+                        df[col] = a_col.astype(np.int64)
 
             # Make float datatypes 32 bit
             else:
-                if not isinstance(df[col], np.float32) and sum(df[col] - df[col].astype(np.float32)) == 0:
-                    df[col] = df[col].astype(np.float32)
+                if not isinstance(a_col, np.float32) and np.nansum(a_col - a_col.astype(np.float32)) == 0:
+                    df[col] = a_col.astype(np.float32)
 
-        elif pd.api.types.is_object_dtype(df[col]):
-            if df[col].nunique() / len(df) < n_unique_object_threshold:
-                df[col] = df[col].astype('category')
+        elif pd.api.types.is_object_dtype(a_col):
+            if a_col.nunique() / len(a_col) < n_unique_object_threshold:
+                df[col] = a_col.astype('category')
 
 
     if verbose:
@@ -266,6 +268,7 @@ def get_object_name(obj):
     Parameters
     ----------
     obj: any variable
+    
     Returns
     -------
     a string
