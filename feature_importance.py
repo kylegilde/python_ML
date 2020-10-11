@@ -1,3 +1,4 @@
+
 import numpy as np  
 import pandas as pd  
 from sklearn.compose import ColumnTransformer
@@ -28,10 +29,12 @@ class FeatureImportance:
     
     Attributes
     __________
-    
-    importances :  A pandas Series containing the feature importance values and feature names as the index.    
-    discarded_features : the features names that were not selected by a sklearn.feature_selection instance
-    plot_importances : A pandas Series containing the subset of values that are actually displaced in the plot. 
+    column_transformer_features :  A list of the feature names created by the ColumnTransformer prior to any selectors being applied
+    transformer_list : A list of the transformer names that correspond with the `column_transformer_features` attribute
+    discarded_features : A list of the features names that were not selected by a sklearn.feature_selection instance.
+    discarding_selectors : A list of the selector names corresponding with the `discarded_features` attribute
+    feature_importance :  A Pandas Series containing the feature importance values and feature names as the index.    
+    plot_importances_df : A Pandas DataFrame containing the subset of features and values that are actually displaced in the plot. 
     
     
     
@@ -41,7 +44,7 @@ class FeatureImportance:
         self.verbose = verbose
 
 
-    def get_feature_names_from_col_transformer(self, verbose=None):  
+    def get_feature_names(self, verbose=None):  
 
         """
 
@@ -69,13 +72,13 @@ class FeatureImportance:
         if verbose is None:
             verbose = self.verbose
             
-        if verbose: print('''\n\n---------\nRunning get_feature_names_from_col_transformer\n---------\n''')
+        if verbose: print('''\n\n---------\nRunning get_feature_names\n---------\n''')
         
         column_transformer = self.pipeline[0]        
         assert isinstance(column_transformer, ColumnTransformer), "Input isn't a ColumnTransformer"
         check_is_fitted(column_transformer)
 
-        new_feature_names = []
+        new_feature_names, transformer_list = [], []
 
         for i, transformer_item in enumerate(column_transformer.transformers_): 
             
@@ -87,7 +90,7 @@ class FeatureImportance:
                       transformer.__class__.__name__, '\n')
                 print('\tn_orig_feature_names:', len(orig_feature_names))
 
-            if transformer_name == 'remainder' and transformer == 'drop':
+            if transformer == 'drop':
                     
                 continue
                 
@@ -128,6 +131,10 @@ class FeatureImportance:
                 print('\tnew_features:\n', names)
 
             new_feature_names.extend(names)
+            transformer_list.extend([transformer_name] * len(names))
+        
+        self.transformer_list, self.column_transformer_features = transformer_list,\
+                                                                    new_feature_names
 
         return new_feature_names
 
@@ -143,7 +150,7 @@ class FeatureImportance:
 
         Returns
         -------
-        a list of the correct feature names
+        a list of the selected feature names
 
 
         """
@@ -153,11 +160,11 @@ class FeatureImportance:
 
         assert isinstance(self.pipeline, Pipeline), "Input isn't a Pipeline"
 
-        features = self.get_feature_names_from_col_transformer()
+        features = self.get_feature_names()
         
         if verbose: print('\n\n---------\nRunning get_selected_features\n---------\n')
             
-        all_discarded_features = []
+        all_discarded_features, discarding_selectors = [], []
 
         for i, step_item in enumerate(self.pipeline.steps[:]):
             
@@ -170,19 +177,25 @@ class FeatureImportance:
                     
                 check_is_fitted(step)
 
-                feature_mask = step.get_support()
-                features = [feature for feature, is_retained in zip(features, feature_mask)\
+                feature_mask_dict = dict(zip(features, step.get_support()))
+                
+                features = [feature for feature, is_retained in feature_mask_dict.items()\
                             if is_retained]
-                discarded_features = [feature for feature, is_retained in zip(features, feature_mask)\
+                                         
+                discarded_features = [feature for feature, is_retained in feature_mask_dict.items()\
                                       if not is_retained]
+                
                 all_discarded_features.extend(discarded_features)
+                discarding_selectors.extend([step_name] * len(discarded_features))
+                
                 
                 if verbose: 
                     print(f'\t{len(features)} retained, {len(discarded_features)} discarded')
                     if len(discarded_features) > 0:
                         print('\n\tdiscarded_features:\n\n', discarded_features)
 
-        self.discarded_features = all_discarded_features
+        self.discarded_features, self.discarding_selectors = all_discarded_features,\
+                                                                discarding_selectors
         
         return features
 
@@ -191,7 +204,7 @@ class FeatureImportance:
         """
         Creates a Pandas Series where values are the feature importance values from the model and feature names are set as the index. 
         
-        This Series is stored in the importances attribute.
+        This Series is stored in the `feature_importance` attribute.
 
         Returns
         -------
@@ -211,10 +224,10 @@ class FeatureImportance:
         assert len(features) == len(importance_values),\
             "The number of feature names & importance values doesn't match"
         
-        importances = pd.Series(importance_values, index=features)
-        self.importances = importances
-        
-        return importances
+        feature_importance = pd.Series(importance_values, index=features)
+        self.feature_importance = feature_importance
+
+        return feature_importance
         
     
     def plot(self, top_n_features=100, rank_features=True, max_scale=True, 
@@ -236,13 +249,14 @@ class FeatureImportance:
         display_imp_values : Should the importance values be displayed? Default is True.
         display_imp_value_decimals : If display_imp_values is True, how many decimal places should be displayed. Default is 1.
         height_per_feature : if height is None, the plot height is calculated by top_n_features * height_per_feature. 
-            This allows all the features enough space to be displayed
+        This allows all the features enough space to be displayed
         orientation : the plot orientation, 'h' (default) or 'v'
         width :  the width of the plot, default is 500
         height : the height of the plot, the default is top_n_features * height_per_feature
         str_pad_width : When rank_features=True, this number of spaces to add between the rank integer and feature name. 
             This will enable the rank integers to line up with each other for easier reading. 
-            Default is 15. It can also be set to 0.
+            Default is 15. If you have long feature names, you can increase this number to make the integers line up more.
+            It can also be set to 0.
         yaxes_tickfont_family : the font for the feature names. Default is Courier New.
         yaxes_tickfont_size : the font size for the feature names. Default is 15.
 
@@ -259,15 +273,20 @@ class FeatureImportance:
         all_importances = self.get_feature_importance()
         n_all_importances = len(all_importances)
         
-        plot_importances = all_importances\
-                        .nlargest(top_n_features)\
-                        .sort_values()
+        plot_importances_df =\
+            all_importances\
+            .nlargest(top_n_features)\
+            .sort_values()\
+            .to_frame('value')\
+            .rename_axis('feature')\
+            .reset_index()
                 
         if max_scale:
-            plot_importances = plot_importances.abs() /\
-                                plot_importances.abs().max() * 100
+            plot_importances_df['value'] = \
+                                plot_importances_df.value.abs() /\
+                                plot_importances_df.value.abs().max() * 100
             
-        self.plot_importances = plot_importances.copy()
+        self.plot_importances_df = plot_importances_df.copy()
         
         if len(all_importances) < top_n_features:
             title_text = 'All Feature Importances'
@@ -275,28 +294,39 @@ class FeatureImportance:
             title_text = f'Top {top_n_features} (of {n_all_importances}) Feature Importances'       
         
         if rank_features:
-            existing_index = plot_importances.index.to_series()\
-                                                .reset_index(drop=True)\
-                                                .str.pad(width=str_pad_width)
+            padded_features = \
+                plot_importances_df.feature\
+                .str.pad(width=str_pad_width)\
+                .values
             
-            ranked_index = pd.Series(range(1, len(plot_importances) + 1)[::-1])\
-                        .astype(str)\
-                        .str.cat(existing_index, sep='. ')
+            ranked_features =\
+                plot_importances_df.index\
+                .to_series()\
+                .sort_values(ascending=False)\
+                .add(1)\
+                .astype(str)\
+                .str.cat(padded_features, sep='. ')\
+                .values
 
-            plot_importances.index = ranked_index
+            plot_importances_df['feature'] = ranked_features
         
         if display_imp_values:
-            text = plot_importances.round(display_imp_value_decimals)
+            text = plot_importances_df.value.round(display_imp_value_decimals)
         else:
             text = None
 
         # create the plot 
         
-        fig = px.bar(plot_importances, orientation=orientation, width=width, 
-                     height=height, text=text)
+        fig = px.bar(plot_importances_df, 
+                     x='value', 
+                     y='feature',
+                     orientation=orientation, 
+                     width=width, 
+                     height=height,
+                     text=text)
         fig.update_layout(title_text=title_text, title_x=0.5) 
         fig.update(layout_showlegend=False)
         fig.update_yaxes(tickfont=dict(family=yaxes_tickfont_family, 
                                        size=yaxes_tickfont_size),
-                        title='')
+                         title='')
         fig.show()
